@@ -98,9 +98,9 @@ namespace helper
         return result;
     }
 
-    constexpr int binCoeff(int N, int K)
+    constexpr int binCoeff(const int N, const int K)
     {
-        if (K > N) return 0;
+        if (N < 0 || K < 0 || K > N) return 0;
         if (K == 0 || K == N) return 1;
 
         int k = (K > N / 2) ? (N - K) : K;
@@ -108,7 +108,7 @@ namespace helper
         int res = 1;
         for (int i = 1; i <= k; ++i)
         {
-            res = res * (N - k + i) / i;
+            res = res * int(N - k + i) / i;
         }
 
         return res;

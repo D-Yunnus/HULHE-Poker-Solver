@@ -1,0 +1,39 @@
+#ifndef CONSTANTS_H
+#define CONSTANTS_H
+
+#define NUM_SUITS 4
+#define NUM_RANKS 13
+#define NUM_CARDS 52
+
+#define HOLE_SIZE 2
+#define FLOP_SIZE 3
+#define TURN_SIZE 4
+#define RIVER_SIZE 5
+
+#define NUM_PREFLOP_HOLES 1'326
+#define NUM_FLOP_BOARDS 1'286'792
+#define NUM_TURN_BOARDS 13'960'050
+#define NUM_RIVER_BOARDS 123'156'254
+
+#define STRAIGHT_SIZE 5
+
+#define ITERATION 10'000'000
+#define SEED 42
+
+#define NUM_BINS 20
+#define NUM_BATCHES 10'000
+
+#define NUM_FLOP_BUCKETS 500
+#define NUM_TURN_BUCKETS 500
+#define NUM_RIVER_BUCKETS 500
+
+#define NUM_BETTING_ROUNDS 4
+#define NUM_ACTIONS 3
+#define SMALL_BET_SIZE 2.0
+#define BIG_BET_SIZE 4.0
+#define NUM_PLAYERS 2
+#define RAISE_CAP 4
+#define SMALL_BLIND_ANTE 1.0
+#define BIG_BLIND_ANTE 2.0
+
+#endif
