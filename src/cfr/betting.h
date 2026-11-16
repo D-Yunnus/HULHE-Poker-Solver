@@ -74,10 +74,9 @@ inline uint64_t index_infoset
     {
         cumBetHistory *= numBetHistories;
 
-        // bucketting size for the street
+        // compute cumulative offset from each street up to desired current street
         const uint64_t streetBucketSize = bucket_size(static_cast<Streets>(street));
-        // offset if the cumulative bets and the bucket size for each previous street
-        streetOffset += cumBetHistory + streetBucketSize;
+        streetOffset += cumBetHistory * streetBucketSize;
     }
 
     // index is the offset by street + local history index + current street bucket

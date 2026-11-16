@@ -35,6 +35,7 @@ def plot_histogram(
     if street == "river":
         totalNumHistograms = NUM_RIVER_BOARDS
 
+    # load histograms into datafram
     numHistogramsPerFile = totalNumHistograms // len(csvFiles)
     csvFile = csvFiles[index // numHistogramsPerFile]
     localCSVIndex = index % numHistogramsPerFile
@@ -49,6 +50,7 @@ def plot_histogram(
     binwidth = 1 / numbins
     bincenters = np.arange(numbins) * binwidth + binwidth / 2
 
+    # plot histogram
     [fig, ax] = plt.subplots(figsize = (10, 5))
     ax.bar(bincenters, histogram, width = binwidth)
     ax.set(

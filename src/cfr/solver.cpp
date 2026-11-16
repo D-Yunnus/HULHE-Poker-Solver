@@ -51,6 +51,7 @@ void trainer
     std::cout << "\tTraining time: " << duration.count() << '\n';
 }
 
+// write to a binary file
 void write_generated_binary
 (
     const std::string& outputPath

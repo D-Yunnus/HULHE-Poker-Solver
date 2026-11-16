@@ -1,27 +1,19 @@
 #ifndef LOADER_H
 #define LOADER_H
 
-#include "cfr/betting.h"
 
 #include <array>
-#include <cstdint>
-#include <filesystem>
-#include <fstream>
 #include <stdexcept>
 #include <string>
 
 #ifndef POKER_NODEMAP_PATH
-#define POKER_NODEMAP_PATH "./build/generated/nodemap.bin"
+#define POKER_NODEMAP_PATH "./build/generated/nodemap.bin" // pathway for binary file storing the infoset nodemap of strategies
 #endif
 
-inline void load_trained_poker_maps
-(
-    const std::string& filePath = {}
-)
+// read the binary file containg nodemap and store onto NODEMAP
+inline void load_trained_poker_maps()
 {
-    const std::filesystem::path path = filePath.empty()
-        ? std::filesystem::path(POKER_NODEMAP_PATH)
-        : std::filesystem::path(filePath);
+    const std::filesystem::path path = POKER_NODEMAP_PATH;
 
     std::ifstream input(path, std::ios::binary);
 

@@ -346,10 +346,10 @@ class Engine
             }
 
             unsigned long long int infoIndex = index_infoset(InfoSet {.history = gameHistory, .bucketindex = bucket});
-            std::array<double, NUM_ACTIONS> strategy = NODEMAP[infoIndex].stratSum;
+            std::array<double, NUM_ACTIONS> strategy = NODEMAP.find(infoIndex)->second.stratSum;
 
             double normalisation = 0;
-            const std::array<bool, NUM_ACTIONS> legalActions = legal_actions(gameHistory.betHistories[gameHistory.street]);
+            std::array<bool, NUM_ACTIONS> legalActions = legal_actions(gameHistory.betHistories[gameHistory.street]);
             int numLegalActions = NUM_ACTIONS;
             for (int i = 0; i < NUM_ACTIONS; ++i)
             {
@@ -360,11 +360,11 @@ class Engine
                 }
                 normalisation += strategy[i];
             }
-            std::cout << normalisation << '\n';
 
+            std::cout << normalisation << '\t';
             std::uniform_real_distribution<> dist(0, 1);
             double randNum = dist(randGen);
-            std::cout << randNum << '\n';
+            std::cout << randNum << '\t';
             double lowerbound = 0;
             double upperbound = 0;
             Actions a = CALL;
@@ -373,7 +373,7 @@ class Engine
             {
                 if (!legalActions[i]) continue;
                 lowerbound = upperbound;
-                upperbound += normalisation > 0.0 ? strategy[i] / normalisation : 1.0 / numLegalActions;
+                upperbound += normalisation > 0.0 ? strategy[i] / normalisation : 1 / numLegalActions;
                 if (lowerbound < randNum && randNum <= upperbound)
                 {
                     a = static_cast<Actions>(i);
@@ -419,7 +419,7 @@ class Engine
                 for (int i = 0; i < FLOP_SIZE; ++i)
                 {
                     playerCards[i + HOLE_SIZE] = draw_card(deck, randGen);
-                    aiCards[i + HOLE_SIZE] = draw_card(deck, randGen);
+                    aiCards[i + HOLE_SIZE] = playerCards[i + HOLE_SIZE];
 
                     printCard(playerCards[i + HOLE_SIZE]);
                     std::cout << "  ";
@@ -431,7 +431,7 @@ class Engine
             case FLOP:
             {
                 playerCards[HOLE_SIZE + TURN_SIZE - 1] = draw_card(deck, randGen);
-                aiCards[HOLE_SIZE + TURN_SIZE - 1] = draw_card(deck, randGen);
+                aiCards[HOLE_SIZE + TURN_SIZE - 1] = playerCards[HOLE_SIZE + TURN_SIZE - 1];
                 
                 for (int i = 0; i < TURN_SIZE; ++i)
                 {
@@ -445,7 +445,7 @@ class Engine
             case TURN:
             {
                 playerCards[HOLE_SIZE + RIVER_SIZE - 1] = draw_card(deck, randGen);
-                aiCards[HOLE_SIZE + RIVER_SIZE - 1] = draw_card(deck, randGen);
+                aiCards[HOLE_SIZE + RIVER_SIZE - 1] = playerCards[HOLE_SIZE + RIVER_SIZE - 1];
 
                 for (int i = 0; i < RIVER_SIZE; ++i)
                 {
@@ -503,13 +503,13 @@ class Engine
                 {
                     std::cout << "Player Win!\n";
                     totalPlayerGain += playerBets;
-                    totalAIGain -= aiBlind;
+                    totalAIGain -= aiBets;
                 }
                 else if (status == LOSS)
                 {
                     std::cout << "Ai Win!\n";
                     totalPlayerGain -= playerBets;
-                    totalAIGain += aiBlind;
+                    totalAIGain += aiBets;
                 };
             }
             std::cout << "Player total: " << totalPlayerGain << '\t';
@@ -520,6 +520,7 @@ class Engine
 void play()
 {
 
+    load_histories();
     load_trained_poker_maps();
 
     Engine gameEngine {};

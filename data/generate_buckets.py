@@ -120,8 +120,11 @@ def assign_clusters(
         csvFiles: list[Path],
         medoids: np.ndarray,
         chunksize: int,
-        outputDir: Path
+        outputDir: Path,
+        cfdBatches: int = 4_096,
+        medoidBatches: int = 32
 ):
+    # cfds for each medoid
     normalisations = medoids.sum(axis = 1, keepdims = True)
     medoidscdfs = np.cumsum(medoids / normalisations, axis = 1)
 
@@ -130,31 +133,38 @@ def assign_clusters(
     with temporaryOutput.open("w", encoding = "utf-8") as outputFile:
         outputFile.write("index,cluster\n")
         for histogramsChunk in iter_histograms_in_chunks(csvFiles, chunksize):
+
+            # run through each histogram
             indexes = np.arange(chunkIndexOffset, chunkIndexOffset + len(histogramsChunk), dtype = np.int64)
 
+            # find cfd of histogram
             histograms = np.asanyarray(histogramsChunk, dtype = np.float32)
             normalisations = histograms.sum(axis = 1, keepdims = True)
             cdfs = np.cumsum(histograms / normalisations, axis = 1)
 
+            # use emd to find the closest medoid
             closestmedoids = np.empty(len(cdfs), dtype = np.int64)
-            for rowStart in range(0, len(cdfs), 4_096):
-                rowEnd = min(rowStart + 4_096, len(cdfs))
-                rowCdfs = cdfs[rowStart:rowEnd]
-                bestDistances = np.full(len(rowCdfs), np.inf, dtype = np.float32)
-                bestMedoids = np.zeros(len(rowCdfs), dtype = np.int64)
+            for start in range(0, len(cdfs), cfdBatches):
+                end = min(start + cfdBatches, len(cdfs))
+                cfdBatch = cdfs[start:end]
+                bestDistances = np.full(len(cfdBatch), np.inf, dtype = np.float32)
+                bestMedoids = np.zeros(len(cfdBatch), dtype = np.int64)
 
-                for medoidStart in range(0, len(medoids), 32):
-                    medoidEnd = min(medoidStart + 32, len(medoids))
-                    distances = np.abs(
-                        rowCdfs[:, None, :] - medoidscdfs[None, medoidStart:medoidEnd, :]
-                    ).sum(axis = 2)
+                # for each cfd in a batch iterate over each medoid and find the medoid that minimises emd
+                for medoidStart in range(0, len(medoids), medoidBatches):
+                    medoidEnd = min(medoidStart + medoidBatches, len(medoids))
+
+                    # calculate emd for a given medoid
+                    distances = np.abs(cfdBatch[:, None, :] - medoidscdfs[None, medoidStart:medoidEnd, :]).sum(axis = 2)
                     localMedoids = np.argmin(distances, axis = 1)
-                    localDistances = distances[np.arange(len(rowCdfs)), localMedoids]
-                    improved = localDistances < bestDistances
-                    bestDistances[improved] = localDistances[improved]
-                    bestMedoids[improved] = medoidStart + localMedoids[improved]
+                    localDistances = distances[np.arange(len(cfdBatch)), localMedoids]
 
-                closestmedoids[rowStart:rowEnd] = bestMedoids
+                    # check if it is a smaller distance than the current smallest distance
+                    min = localDistances < bestDistances
+                    bestDistances[min] = localDistances[min]
+                    bestMedoids[min] = medoidStart + localMedoids[min]
+
+                closestmedoids[start:end] = bestMedoids # closest medoid for a given batch
 
             np.savetxt(
                 outputFile,
@@ -169,7 +179,7 @@ def assign_clusters(
 
 def cluster_model(
         street: str,
-        numcluster: int = 500,
+        numcluster: int = 500, # 500 default bucket for each street
         samplesize: int = 30_000,
         histogramsChunksize: int = 100_000,
         threadChunksize: int = 512,
@@ -194,9 +204,6 @@ def cluster_model(
     medoidsSampleIndexes = model.medoid_indices_
     medoidsIndexes = sampleIndexes[medoidsSampleIndexes]
     medoidsHistograms = sample[medoidsSampleIndexes]
-    
-#    outputPath = outputDir / f"{street}_medoids.npz"
-#    np.savez(outputPath, histograms = medoidsHistograms, indices = medoidsIndexes)
 
     assign_clusters(
         csvFiles,
@@ -209,6 +216,8 @@ def cluster_model(
     print(f"Elapsed: {end - start:.1f} s")
 
 def main():
+    cluster_model("fold")
+    cluster_model("turn")
     cluster_model("river")
 
 if __name__ == "__main__":

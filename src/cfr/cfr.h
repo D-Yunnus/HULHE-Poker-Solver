@@ -32,7 +32,7 @@ std::array<double, NUM_ACTIONS> get_strategy
     double normalisation = 0;
     for (int a = 0; a < NUM_ACTIONS; ++a)
     {
-        // keep only the legal actions with positive regret
+        // ensure positive regret for strategy
         strategy[a] = legalActions[a] ? std::max(gameNode.regretSum[a], 0.0) : 0.0;
         normalisation += strategy[a];
     }
@@ -70,54 +70,52 @@ int count_trailing_zeros(uint32_t value)
 int index_hole_cards(const std::array<uint32_t, 7>& cards)
 {
     constexpr uint32_t rankMask = (1u << NUM_RANKS) - 1;
-    const auto cardIndex = [](const uint32_t card)
+    const auto rankOf = [](const uint32_t card)
     {
         const uint32_t ranks = card & rankMask;
+        return count_trailing_zeros(ranks);
+    };
+    const auto suitOf = [](const uint32_t card)
+    {
         const uint32_t suits = card >> NUM_RANKS;
-        if (ranks == 0 || suits == 0)
-            throw std::invalid_argument("invalid encoded hole card");
-        const int rank = count_trailing_zeros(ranks);
-        const int suit = count_trailing_zeros(suits);
-        return rank * NUM_SUITS + suit;
+        return count_trailing_zeros(suits);
     };
 
-    int first = cardIndex(cards[0]);
-    int second = cardIndex(cards[1]);
-    if (first > second) std::swap(first, second);
-    return second * (second - 1) / 2 + first;
-}
+    const int firstRank = rankOf(cards[0]);
+    const int secondRank = rankOf(cards[1]);
 
+    if (firstRank == secondRank)
+        return firstRank;
 
-// given the cards in play, draw uniformly at random a new card
-#if 0
-template <std::size_t NUM_CARDS_IN_PLAY>
-uint32_t draw_cards
-(
-    const std::array<uint32_t, NUM_CARDS_IN_PLAY>& cardsInPlay
-)
-{
-    const std::size_t deckSize = NUM_CARDS - NUM_CARDS_IN_PLAY;
-    std::array<uint32_t, deckSize> deck = {};
-    std::size_t count = 0;
-    for (int i = 0; i < NUM_CARDS; ++i)
+    const int lowerRank = std::min(firstRank, secondRank);
+    const int higherRank = std::max(firstRank, secondRank);
+    const bool sameSuit = suitOf(cards[0]) == suitOf(cards[1]);
+
+    int rankPairIndex = 0;
+    for (int low = 0; low < NUM_RANKS; ++low)
     {
-        const uint32_t card = bitwise_card(static_cast<Ranks>(i / NUM_SUITS), static_cast<Suits>(i % NUM_SUITS));
-        bool alreadyPlayed = false;
-        for (const uint32_t playCards: cardsInPlay)
+        for (int high = low + 1; high < NUM_RANKS; ++high)
         {
-            if (card == playCards) alreadyPlayed = true;
+            if (low == lowerRank && high == higherRank)
+            {
+                if (sameSuit)
+                    return 13 + rankPairIndex;
+                return 13 + 78 + rankPairIndex;
+            }
+            ++rankPairIndex;
         }
-        if (!alreadyPlayed) deck[count++] = card;
     }
 
-    std::uniform_int_distribution<std::size_t> dist(0, deckSize - 1);
-    
-    return deck[dist(rng())];
+    throw std::invalid_argument("invalid hole-card ranks");
 }
-#endif
 
 // define a map between infoset indices and associated nodes containing the strategies
 inline std::unordered_map<uint64_t, Node> NODEMAP;
+
+inline bool is_small_blind(const Streets street, const int player)
+{
+    return street == PREFLOP ? player == 0 : player == 1;
+}
 
 // cfr algorithm
 double cfr_min
@@ -161,20 +159,10 @@ double cfr_min
 
     // calculate the bets wagered already by both players
     const std::array<double, 2> bets = calculate_bets(history);
-    double currPlayerBet = isFlopDealt && currPlayer == 0
-        ? bets[1]
-        : isFlopDealt
-            ? bets[0]
-            : currPlayer == 0
-                ? bets[0]
-                : bets[1];
-    double oppPlayerBet = isFlopDealt && currPlayer == 0
-        ? bets[0]
-        : isFlopDealt
-            ? bets[1]
-            : currPlayer == 0
-                ? bets[1]
-                : bets[0];
+    const bool currPlayerIsSmallBlind = is_small_blind(history.street, currPlayer);
+    const bool oppPlayerIsSmallBlind = is_small_blind(history.street, oppPlayer);
+    const double currPlayerBet = currPlayerIsSmallBlind ? bets[0] : bets[1];
+    const double oppPlayerBet = oppPlayerIsSmallBlind ? bets[0] : bets[1];
 
     // current street betting history
     std::vector<Actions>& currStreetHistory = isRiverDealt
@@ -186,8 +174,8 @@ double cfr_min
                 : history.betHistories[0];
 
     // current player and opposing players cards
-    const std::array<uint32_t, 7>& currPlayerCards = currPlayer == 0 ? bb : sb;
-    const std::array<uint32_t, 7>& oppPlayerCards = oppPlayer == 0 ? bb : sb;
+    const std::array<uint32_t, 7>& currPlayerCards = currPlayerIsSmallBlind ? sb : bb;
+    const std::array<uint32_t, 7>& oppPlayerCards = oppPlayerIsSmallBlind ? sb : bb;
 
     // terminal nodes:
 
@@ -346,21 +334,9 @@ double cfr_min
     // obtain strategy
     std::array<double, NUM_ACTIONS> strategy = get_strategy(nodeTemp, legalActions);
 
-    // identify player reach probabilities
-    const double currPlayerReachProb = isFlopDealt && currPlayer == 0
-        ? reach_prob_sb
-        : isFlopDealt
-            ? reach_prob_bb
-            : currPlayer == 0
-                ? reach_prob_bb
-                : reach_prob_sb;
-    const double oppPlayerReachProb = isFlopDealt && currPlayer == 0
-        ? reach_prob_bb
-        : isFlopDealt
-            ? reach_prob_sb
-            : currPlayer == 0
-                ? reach_prob_sb
-                : reach_prob_bb;
+    // identify player reach probabilities using the same SB/BB mapping as the game state.
+    const double currPlayerReachProb = currPlayerIsSmallBlind ? reach_prob_sb : reach_prob_bb;
+    const double oppPlayerReachProb = oppPlayerIsSmallBlind ? reach_prob_sb : reach_prob_bb;
 
     // update stratSum in the node using the current strategy and reach probability
     #pragma omp critical(node_map_access)
@@ -382,14 +358,10 @@ double cfr_min
         currStreetHistory.push_back(static_cast<Actions>(i)); // add action to history
 
         // recursive cfr for new history returning utility for that action
-        if (isFlopDealt && currPlayer == 0)
+        if (currPlayerIsSmallBlind)
             util[i] = - cfr_min(sb, bb, history, reach_prob_sb * strategy[i], reach_prob_bb, flopCards, turnCard, riverCard);
-        else if (isFlopDealt)
-            util[i] = - cfr_min(sb, bb, history, reach_prob_sb, reach_prob_bb * strategy[i], flopCards, turnCard, riverCard);
-        else if (currPlayer == 0)
-            util[i] = - cfr_min(sb, bb, history, reach_prob_sb, reach_prob_bb * strategy[i], flopCards, turnCard, riverCard);
         else
-            util[i] = - cfr_min(sb, bb, history, reach_prob_sb * strategy[i], reach_prob_bb, flopCards, turnCard, riverCard);
+            util[i] = - cfr_min(sb, bb, history, reach_prob_sb, reach_prob_bb * strategy[i], flopCards, turnCard, riverCard);
         
         // compute expected utility
         expected_util += strategy[i] * util[i];
@@ -397,7 +369,7 @@ double cfr_min
         currStreetHistory.pop_back();
     }
 
-    // use utility to compute regrets and hence edit regret sums
+    // use utility to compute regrets and then update regret sums
     #pragma omp critical(node_map_access)
     {
         Node& currNode = NODEMAP.try_emplace(infoIndex).first->second;;
@@ -405,7 +377,7 @@ double cfr_min
         {
             if (!legalActions[i]) continue;
             double regret = util[i] - expected_util;
-            currNode.regretSum[i] += oppPlayerReachProb * regret;
+            currNode.regretSum[i] = std::max(0.0, currNode.regretSum[i] + oppPlayerReachProb * regret); // implemented cfr+ for faster convergence
         }
     }
 
